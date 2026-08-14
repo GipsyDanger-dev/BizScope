@@ -1,0 +1,282 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ResearchStatus {
+  PENDING
+  COLLECTING
+  PROCESSING
+  ANALYZING
+  COMPLETED
+  FAILED
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum PlaceDataSource {
+  GOOGLE_PLACES
+}
+
+enum DocumentType {
+  RESEARCH_PARAMETERS
+  MARKET_OVERVIEW
+  COMPETITOR_ANALYSIS
+  DENSITY_ANALYSIS
+  OPPORTUNITY_SIGNALS
+  DATA_LIMITATIONS
+}
+
+enum ChatRole {
+  USER
+  ASSISTANT
+}
+
+model User {
+  id               String            @id @default(cuid())
+  email            String            @unique
+  name             String?
+  image            String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  researchProjects ResearchProject[]
+  chatSessions     ChatSession[]
+}
+
+model ResearchProject {
+  id               String                @id @default(cuid())
+  userId           String
+  name             String
+  category         String
+  locationQuery    String
+  latitude         Float?
+  longitude        Float?
+  radiusMeters     Int
+  maxResults       Int
+  status           ResearchStatus        @default(PENDING)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobs             ResearchJob[]
+  places           Place[]
+  marketMetrics    MarketMetrics?
+  competitorScores CompetitorAnalysis[]
+  aiInsights       AIInsight[]
+  reports          Report[]
+  documents        ResearchDocument[]
+  chatSessions     ChatSession[]
+
+  @@index([userId, updatedAt])
+}
+
+model ResearchJob {
+  id                String          @id @default(cuid())
+  researchProjectId String
+  status            JobStatus       @default(PENDING)
+  totalDiscovered   Int             @default(0)
+  totalProcessed    Int             @default(0)
+  totalValid        Int             @default(0)
+  totalFailed       Int             @default(0)
+  errorMessage      String?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  createdAt         DateTime        @default(now())
+  researchProject   ResearchProject @relation(fields: [researchProjectId], references: [id], onDelete: Cascade)
+
+  @@index([researchProjectId, createdAt])
+}
+
+model Place {
+  id                String          @id @default(cuid())
+  placeId           String
+  researchProjectId String
+  name              String
+  normalizedName    String
+  category          String?
+  address           String?
+  city              String?
+  district          String?
+  latitude          Float?
+  longitude         Float?
+  rating            Float?
+  reviewCount       Int?
+  phone             String?
+  website           String?
+  mapsUri           String?
+  businessStatus    String?
+  priceLevel        String?
+  types             String[]
+  source            PlaceDataSource @default(GOOGLE_PLACES)
+  fetchedAt         DateTime
+  expiresAt         DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  researchProject   ResearchProject @relation(fields: [researchProjectId], references: [id], onDelete: Cascade)
+  competitorScore   CompetitorAnalysis?
+
+  @@unique([researchProjectId, placeId])
+  @@index([researchProjectId, rating])
+}
+
+model MarketMetrics {
+  id                 String          @id @default(cuid())
+  researchProjectId  String          @unique
+  totalBusinesses    Int
+  averageRating      Float?
+  medianRating       Float?
+  averageReviewCount Float?
+  medianReviewCount  Float?
+  ratingDistribution Json
+  reviewDistribution Json
+  densityScore       Float?
+  competitionScore   Float?
+  calculatedAt       DateTime        @default(now())
+  researchProject    ResearchProject @relation(fields: [researchProjectId], references: [id], onDelete: Cascade)
+}
+
+model CompetitorAnalysis {
+  id                String          @id @default(cuid())
+  researchProjectId String
+  placeRecordId     String          @unique
+  competitionScore  Float
+  ratingScore       Float
+  reviewScore       Float
+  densityScore      Float
+  proximityScore    Float?
+  overallScore      Float
+  explanation       Json
+  createdAt         DateTime        @default(now())
+  researchProject   ResearchProject @relation(fields: [researchProjectId], references: [id], onDelete: Cascade)
+  place             Place           @relation(fields: [placeRecordId], references: [id], onDelete: Cascade)
+
+  @@index([researchProjectId, overallScore])
+}
+
+model AIInsight {
+  id                  String          @id @default(cuid())
+  researchProjectId   String
+  summary             String
+  marketOverview      String
+  competitionInsights Json
+  opportunityInsights Json
+  risks               Json
+  recommendations     Json
+  limitations         Json
+  confidence          Float?
+  model               String
+  promptVersion       String
+  createdAt           DateTime        @default(now())
+  researchProject     ResearchProject @relation(fields: [researchProjectId], references: [id], onDelete: Cascade)
+
+  @@index([researchProjectId, createdAt])
+}
+
+model Report {
+  id                String          @id @default(cuid())
+  researchProjectId String
+  title             String
+  reportData        Json
+  createdAt         DateTime        @default(now())
+  researchProject   ResearchProject @relation(fields: [researchProjectId], references: [id], onDelete: Cascade)
+}
+
+model ResearchDocument {
+  id                String          @id @default(cuid())
+  researchProjectId String
+  type              DocumentType
+  title             String
+  content           String
+  metadata          Json
+  sourceUpdatedAt   DateTime
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  researchProject   ResearchProject @relation(fields: [researchProjectId], references: [id], onDelete: Cascade)
+  chunks            DocumentChunk[]
+
+  @@index([researchProjectId, type])
+}
+
+model DocumentChunk {
+  id         String               @id @default(cuid())
+  documentId String
+  position   Int
+  content    String
+  tokenCount Int?
+  metadata   Json
+  createdAt  DateTime             @default(now())
+  document   ResearchDocument     @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  embedding  DocumentEmbedding?
+  citations  RetrievalLogSource[]
+
+  @@unique([documentId, position])
+}
+
+model DocumentEmbedding {
+  id              String        @id @default(cuid())
+  documentChunkId String        @unique
+  model           String
+  dimensions      Int
+  contentHash     String
+  vector          Unsupported("vector")?
+  embeddedAt      DateTime      @default(now())
+  documentChunk   DocumentChunk @relation(fields: [documentChunkId], references: [id], onDelete: Cascade)
+}
+
+model ChatSession {
+  id                String          @id @default(cuid())
+  userId            String
+  researchProjectId String
+  title             String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  researchProject   ResearchProject @relation(fields: [researchProjectId], references: [id], onDelete: Cascade)
+  messages          ChatMessage[]
+
+  @@index([userId, updatedAt])
+  @@index([researchProjectId])
+}
+
+model ChatMessage {
+  id            String       @id @default(cuid())
+  chatSessionId String
+  role          ChatRole
+  content       String
+  createdAt     DateTime     @default(now())
+  chatSession   ChatSession  @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
+  retrieval     RetrievalLog?
+
+  @@index([chatSessionId, createdAt])
+}
+
+model RetrievalLog {
+  id             String               @id @default(cuid())
+  chatMessageId  String               @unique
+  query          String
+  embeddingModel String
+  createdAt      DateTime             @default(now())
+  chatMessage    ChatMessage          @relation(fields: [chatMessageId], references: [id], onDelete: Cascade)
+  sources        RetrievalLogSource[]
+}
+
+model RetrievalLogSource {
+  id              String       @id @default(cuid())
+  retrievalLogId  String
+  documentChunkId String
+  rank            Int
+  similarity      Float
+  retrievalLog    RetrievalLog @relation(fields: [retrievalLogId], references: [id], onDelete: Cascade)
+  documentChunk   DocumentChunk @relation(fields: [documentChunkId], references: [id], onDelete: Cascade)
+
+  @@unique([retrievalLogId, rank])
+  @@index([documentChunkId])
+}
