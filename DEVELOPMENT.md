@@ -15,6 +15,10 @@ Before each push:
 
 If a change needs an earlier push for collaboration, backup, review, or deployment, it may be pushed before the third change.
 
+## Task Handover
+
+Every completed task must end with a concise recommended next step, including why it is the highest-priority follow-up.
+
 ## RAG Development Direction
 
 The application uses retrieval-augmented generation (RAG). AI responses must retrieve only authorized, research-scoped context and must distinguish retrieved facts from model interpretation.
